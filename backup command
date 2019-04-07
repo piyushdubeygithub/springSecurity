@@ -1,0 +1,44 @@
+CREATE DATABASE ofbiz_finalaromarstaging_receiveinventoryitemupload WITH TEMPLATE ofbiz_finalaromarstaging;
+
+CREATE DATABASE ofbiz_finalaromarstaging  WITH TEMPLATE ofbiz_finalaromarstaging_markasreadyvendorinvoice;
+
+drop database ofbiz_finalaromarstaging;
+
+1549180952514_open purchase order_readyforupload (1).xlsx
+
+CREATE DATABASE ofbiz_finalaromarstaging_missingProduct WITH TEMPLATE ofbiz_finalaromarstaging;
+
+copy (select invoice_id, party_id from invoice where invoice_type_id = 'SALES_INVOICE') to '/home/ubuntu/invoice.txt';
+
+
+copy (select * from public.gl_account) to '/home/ubuntu/glaccount.txt';
+
+
+ sudo date --set="2 OCT 2006 18:00:00s"
+
+
+CREATE DATABASE ofbiz_aromar_lastbackup WITH TEMPLATE ofbiz_aromar;
+
+pg_dump -U skulocity -h new-stagpsql -h new-staging-server-5-april-2018.c8t2zusu80fc.us-east-1.rds.amazonaws.com -U skulocity -W -d ofbiz_finalaromarstaging_vendor>aromarproduction.sql
+
+
+ ofbiz_finalaromarstaging_vendor                                 | skulocity | UTF8     | en_US.UTF-8 | en_US.UTF-8 |                         | 169 MB
+
+
+sudo psql -U skulocity  -h skulocity.c8t2zusu80fc.us-east-1.rds.amazonaws.com ofbiz_aromar  < aromarproduction.sql
+
+
+CREATE DATABASE ofbiz_vendoruploadstep2  WITH TEMPLATE ofbiz_aromarstaging; 
+CREATE DATABASE ofbiz_aromarstaging  WITH TEMPLATE ofbiz_vendoruploadstep2; 
+
+SELECT 
+    pg_terminate_backend(pid) 
+FROM 
+    pg_stat_activity 
+WHERE 
+    -- don't kill my own connection!
+    pid <> pg_backend_pid()
+    -- don't kill the connections to other databases
+    AND datname = 'ofbiz_aromarstaging'
+    ;
+
