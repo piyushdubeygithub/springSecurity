@@ -1,0 +1,213 @@
+package com.bank.bitcoin;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.sql.Date;
+import java.util.List;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationListener;
+import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
+
+import com.bank.bitcoin.conf.EnvConfiguration;
+import com.bank.bitcoin.constant.BitcoinCoreUrl;
+import com.bank.bitcoin.domain.State;
+import com.bank.bitcoin.domain.bitcoin.BitcoinWallet;
+import com.bank.bitcoin.domain.bitcoin.ServiceFee;
+import com.bank.bitcoin.domain.user.Profile;
+import com.bank.bitcoin.domain.user.Security;
+import com.bank.bitcoin.domain.user.User;
+import com.bank.bitcoin.enums.Role;
+import com.bank.bitcoin.permission.PermissionAssigner;
+import com.bank.bitcoin.repository.StateRepository;
+import com.bank.bitcoin.repository.bitcoin.BitcoinWalletRepository;
+import com.bank.bitcoin.repository.user.ProfileRepository;
+import com.bank.bitcoin.repository.user.SecurityRepository;
+import com.bank.bitcoin.repository.user.ServiceFeeRepository;
+import com.bank.bitcoin.repository.user.UserRepository;
+import com.bank.bitcoin.service.S3Service;
+import com.bank.bitcoin.service.auth.AuthenticationService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+/**
+ * Bitcoin Bank Services BootStrap
+ * 
+ * @author Vishal Kumar and Ajit Soman
+ *
+ */
+
+@Component
+public class BootStrap implements ApplicationListener<ContextRefreshedEvent> {
+
+	private static Logger LOGGER = LoggerFactory.getLogger(BootStrap.class);
+	@Autowired
+	UserRepository userRepository;
+	@Autowired
+	SecurityRepository securityRepository;
+	@Autowired
+	ProfileRepository profileRepository;
+	@Autowired
+	ServiceFeeRepository serviceRepository;
+	@Autowired
+	EnvConfiguration envConfiguration;
+	@Autowired
+	BitcoinWalletRepository bitcoinWalletRepository;
+	@Autowired
+	StateRepository stateRepository;
+	@Autowired
+	AuthenticationService authenticationService;
+
+	@Value("${bitcoinbank.s3.accesskey.id}")
+	String appId;
+	@Value("${bitcoinbank.s3.secret.accesskey}")
+	String appSecret;
+	@Value("${s3.bucket.name}")
+	String bucketName;
+
+	@Override
+	public void onApplicationEvent(ContextRefreshedEvent arg0) {
+		// This will initialize static block and will set permission on API's
+		new PermissionAssigner();
+
+		// Create super admin
+		createSuperAdmin();
+
+		saveStateWithCities();
+
+		try {
+			S3Service.s3Authentication();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		try {
+			authenticationService.registerBitcoinBank();
+		} catch (JSONException e) {
+			e.printStackTrace();
+		}
+	}
+
+	void createSuperAdmin() {
+		long count = userRepository.countByRole(Role.ROLE_SUPER_ADMIN);
+		if (count == 0) {
+			String email = "bitcoinbank2017@gmail.com";
+			String password = "bitcoinbank@admin";
+			User user = new User();
+			user.setRole(Role.ROLE_SUPER_ADMIN);
+			User savedUser = userRepository.save(user);
+
+			Security security = new Security();
+			security.setEmail(email);
+			String encryptedPassword = new BCryptPasswordEncoder().encode(password);
+			security.setPassword(encryptedPassword);
+			security.setUserId(savedUser.getId());
+			security.setEmailVerified(true);
+			Security newSecurity = securityRepository.save(security);
+
+			Profile profile = new Profile();
+			profile.setFirstName("Bitcoin");
+			profile.setLastName("Admin 1");
+			profile.setDob(Date.valueOf("1980-12-12"));
+			profile.setUserId(savedUser.getId());
+			profileRepository.save(profile);
+
+			savedUser.setSecurity(newSecurity);
+			savedUser.setProfile(profile);
+			User finalSavedUser1 = userRepository.save(savedUser);
+
+			user = new User();
+			user.setRole(Role.ROLE_SUPER_ADMIN);
+			savedUser = userRepository.save(user);
+
+			security = new Security();
+			security.setEmail("bitcoinbank2017+1@gmail.com");
+			encryptedPassword = new BCryptPasswordEncoder().encode("bitcoinbank@admin1");
+			security.setPassword(encryptedPassword);
+			security.setUserId(savedUser.getId());
+			security.setEmailVerified(true);
+			newSecurity = securityRepository.save(security);
+
+			profile = new Profile();
+			profile.setFirstName("Bitcoin");
+			profile.setLastName("Admin 2");
+			profile.setDob(Date.valueOf("1980-01-01"));
+			profile.setUserId(savedUser.getId());
+			profileRepository.save(profile);
+
+			savedUser.setSecurity(newSecurity);
+			savedUser.setProfile(profile);
+			User finalSavedUser2 = userRepository.save(savedUser);
+
+			LOGGER.info("Super admin created");
+			try {
+				createBitcoinWalletForSuperAdmin(finalSavedUser1.getId(), finalSavedUser2.getId());
+			} catch (JSONException e) {
+				LOGGER.error("Unable to create super admin bitcoin wallet:" + e);
+			}
+
+			ServiceFee serviceFee = new ServiceFee();
+			serviceFee.setBitcoinFee(0.0001);
+			serviceFee.setBuyPercent(10.0);
+			serviceFee.setSellPercent(5.0);
+			serviceFee.setCurrentRate(100000.0);
+			serviceFee.setServiceTax(15.0);
+			serviceRepository.save(serviceFee);
+
+		} else {
+			LOGGER.info("Super admin already saved");
+		}
+	}
+
+	void createBitcoinWalletForSuperAdmin(long userId1, long userId2) throws JSONException {
+		String walletCreationUrl = envConfiguration.getBitcoinCoreUrl() + BitcoinCoreUrl.CREATE_ADMIN_WALLET;
+
+		HttpHeaders httpHeaders = new HttpHeaders();
+		httpHeaders.set("Content-Type", "application/json");
+		JSONObject json = new JSONObject();
+		json.put("walletType", "HOT_WALLET");
+
+		HttpEntity<String> httpEntity = new HttpEntity<String>(json.toString(), httpHeaders);
+		RestTemplate restTemplate = new RestTemplate();
+		String response = restTemplate.postForObject(walletCreationUrl, httpEntity, String.class);
+		JSONObject responseJson = new JSONObject(response);
+		LOGGER.info("Bitcoin wallet has been created for super admin" + responseJson);
+		BitcoinWallet bitcoinWallet1 = new BitcoinWallet("adminWallet", userId1);
+		BitcoinWallet bitcoinWallet2 = new BitcoinWallet("adminWallet", userId2);
+		BitcoinWallet savedBitcoinWallet1 = bitcoinWalletRepository.save(bitcoinWallet1);
+		BitcoinWallet savedBitcoinWallet2 = bitcoinWalletRepository.save(bitcoinWallet2);
+		userRepository.setBitcoinWalletId(savedBitcoinWallet1.getWalletId(), userId1);
+		userRepository.setBitcoinWalletId(savedBitcoinWallet2.getWalletId(), userId2);
+	}
+
+	void saveStateWithCities() {
+		long count = stateRepository.count();
+		if (count == 0) {
+			ObjectMapper mapper = new ObjectMapper();
+			TypeReference<List<State>> mapType = new TypeReference<List<State>>() {
+			};
+			InputStream is = TypeReference.class.getResourceAsStream("/json/state-city.json");
+			try {
+				List<State> stateList = mapper.readValue(is, mapType);
+				stateRepository.save(stateList);
+				LOGGER.info("States list saved successfully");
+			} catch (IOException e) {
+				LOGGER.error(e.getMessage());
+			}
+		} else {
+			LOGGER.info("States list already saved");
+		}
+	}
+
+}
+
