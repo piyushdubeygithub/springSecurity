@@ -1,5 +1,6 @@
 package com.example.vikash.controller;
 
+import java.lang.annotation.Documented;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,13 +13,20 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.vikash.service.UserService;
 import com.example.vikash.utils.ResponseHandler;
+/**
+ * @author piyush
+ *
+ */
 @RestController
 @RequestMapping("/api/v1")
 public class AdminController {
 	
 	@Autowired
 	UserService userService;
-	
+	/**
+	 * @param pageable
+	 * @return
+	 */
 	@RequestMapping(value="/user/getallUser" , method=RequestMethod.GET)
 	ResponseEntity<Object> getAllUser(Pageable pageable){		
 		Map result= null;

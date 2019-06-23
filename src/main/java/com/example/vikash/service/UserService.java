@@ -49,7 +49,7 @@ public class UserService {
 				User data = userRepository.save(user);
 				// result.put("data", data);
 				String token = UUID.randomUUID().toString();
-				VerificationToken verificationToken = new VerificationToken(token, data.getEmail(), data.getUserId(),TokenType.REGISTRATION);
+				VerificationToken verificationToken = new VerificationToken(token, data.getEmail(), null,TokenType.REGISTRATION);
 				verificationTokenRepository.save(verificationToken);
 				sender.sendEmail(data.getEmail(), "Verify User",
 						"http://localhost:8080/api/v1/verify/user" + "?" + "token" + "=" + token);
@@ -96,7 +96,7 @@ public class UserService {
 	
 	public Map updateUser(User user) throws Exception {
 		Map result=new HashMap();
-	    User userDB = userRepository.findOne(user.getUserId());
+	    User userDB = userRepository.findOne(null);
         if(userDB!=null){
         	userDB.setFirstName(user.getFirstName());
         	userDB.setMobileNumber(user.getMobileNumber());
@@ -143,7 +143,7 @@ public class UserService {
 		User user=userRepository.findByEmailAndIsEmailVerified(email,true);
 		if(user.getEmail()!=null){
 			String token = UUID.randomUUID().toString();
-			VerificationToken verificationToken = new VerificationToken(token, user.getEmail(), user.getUserId(),TokenType.FORGOT_PASSWORD);
+			VerificationToken verificationToken = new VerificationToken(token, user.getEmail(), null,TokenType.FORGOT_PASSWORD);
 			verificationTokenRepository.save(verificationToken);
 			sender.sendEmail(user.getEmail(), "Verify User",
 					"http://localhost:8080/api/v1/verify/forget/password" + "?" + "token" + "=" + token);

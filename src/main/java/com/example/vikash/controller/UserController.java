@@ -17,6 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.vikash.domain.User;
 import com.example.vikash.service.UserService;
 import com.example.vikash.utils.ResponseHandler;
+/**
+ * @author piyush
+ *
+ */
 @RestController
 @RequestMapping("/api/v1")
 public class UserController {
@@ -26,6 +30,10 @@ public class UserController {
 	UserService userService;
 	
 	
+	/**
+	 * @param user
+	 * @return
+	 */
 	@RequestMapping(value="/user/signup" , method=RequestMethod.POST)
 	ResponseEntity<Object> createUser(@RequestBody User user){
 		Map result= null;
